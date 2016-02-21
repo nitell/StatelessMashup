@@ -2,72 +2,36 @@
 using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using static System.String;
+using static StateLessCshartMashupService.Controllers.HttpGet;
 
 namespace StateLessCshartMashupService.Controllers
 {
     public static class Serve
     {
-        private static dynamic ScrapeMusicBrainzResponse(JObject o)
-        {
-            return o == null
-                ? null
-                : new
-                {
-                    Id = o["id"],
-                    Wikipedia = o.SelectTokens("relations[?(@.type == 'wikipedia')].url.resource").FirstOrDefault(),
-                    Albums = o.SelectTokens("release-groups[?(@.primary-type == 'Album')]")
-                        .Select(a => new {Id = a["id"], Title = a["title"]})
-                        .ToArray()
-                };
-        }
+        private static async Task<string> GetCoverArt(string id) =>
+            (await GetAsync(Format(Constants.CoverArtBaseUrl, id)))?.SelectToken("images[0].image")?.ToString();
 
-        private static dynamic GetCoverArt(dynamic mbId)
-        {
-            return HttpGet.Get(string.Format(Constants.CoverArtBaseUrl, mbId));
-        }
+        private static async Task<string> GetWiki(string id) => 
+            (await GetAsync(Format(Constants.WikipediaBaseUrl, id)))?.SelectToken("query.pages.*.extract")?.ToString();
 
-        private static dynamic GetWiki(dynamic wikiUrl)
-        {
-            return
-                HttpGet.Get(string.Format(Constants.WikipediaBaseUrl,
-                    wikiUrl.ToString().Substring("http://en.wikipedia.org/wiki/".Length)));
-        }
+        private static string ScrapeWikiId(JObject o) => 
+            ((string)o?.SelectTokens("relations[?(@.type == 'wikipedia')].url.resource")?.FirstOrDefault())?.Substring(29);
 
-        private static dynamic GetMusicBrainz(dynamic mbId)
-        {
-            return HttpGet.Get(string.Format(Constants.MusicBrainzBaseUrl, mbId));
-        }
+        private static IEnumerable<JToken> ScrapeAlbums(JObject o) => 
+            o?.SelectTokens("release-groups[?(@.primary-type == 'Album')]") ?? Enumerable.Empty<JToken>();
 
-        private static dynamic ScrapeWikipedia(dynamic res)
+        public static async Task<JObject> ServeMbid(string id)
         {
-            return res.SelectToken("query.pages.*.extract");
-        }
-
-        private static dynamic ScrapeCoverArt(dynamic res)
-        {
-            return res?.SelectToken("images[0].image");
-        }
-
-        private static async Task<dynamic> Search(dynamic mbResponse)
-        {
-            return mbResponse == null
-                ? null
-                : new
-                {
-                    mbResponse.Id,
-                    ScrapeWikipedia = await Task.Run(() => ScrapeWikipedia(GetWiki(mbResponse.Wikipedia))),
-                    Albums =
-                        await
-                            Task.WhenAll(
-                                ((IEnumerable<dynamic>) mbResponse.Albums).Select(
-                                    a => Task.Factory.StartNew(() =>
-                                        new {a.Title, Image = ScrapeCoverArt(GetCoverArt(a.Id))})).ToArray())
-                };
-        }
-
-        public static Task<dynamic> ServeMbid(string mbId)
-        {
-            return Search(ScrapeMusicBrainzResponse(GetMusicBrainz(mbId)));
+            var mb = await GetAsync(Format(Constants.MusicBrainzBaseUrl,id));
+            var wiki = GetWiki(ScrapeWikiId(mb));
+            var ca = ScrapeAlbums(mb).Select(x => Task.Run(async () => new { Title = x["title"], Art = await GetCoverArt((string)x["id"])})).ToArray();
+            return mb != null ? new JObject
+            {
+                ["id"] = mb["id"],
+                ["description"] = await wiki,
+                ["albums"] = JArray.FromObject(await Task.WhenAll(ca))
+            } : null;
         }
     }
 }
