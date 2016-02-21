@@ -1,6 +1,5 @@
 ﻿using System.Threading.Tasks;
 using Microsoft.AspNet.Mvc;
-using Newtonsoft.Json;
 using static StateLessCshartMashupService.Controllers.Serve;
 
 namespace StateLessCshartMashupService.Controllers
@@ -12,7 +11,7 @@ namespace StateLessCshartMashupService.Controllers
         [HttpGet("{id}")]
         public async Task<object> Get(string id)
         {
-            return await ServeMbid(id) ?? (object)HttpNotFound();
+            return await ServeArtist(id) ?? (object)HttpNotFound();
         }     
     }
 }
