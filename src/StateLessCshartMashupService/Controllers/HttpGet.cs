@@ -1,21 +1,16 @@
-﻿using System.Diagnostics;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using System.Net.Http;
-using Microsoft.AspNet.Razor;
 
 namespace StateLessCshartMashupService.Controllers
 {
     public static class HttpGet
     {
-        public static JObject Get(string url)
-        {            
-            return ParseResults(new HttpClient().GetAsync(url).Result);            
-        }
+        public static async Task<JObject> GetAsync(string url) => 
+            Parse(await new HttpClient().GetAsync(url));
+        
 
-        private static JObject ParseResults(HttpResponseMessage result)
-        {
-            return result.IsSuccessStatusCode ? JObject.Parse(result.Content.ReadAsStringAsync().Result) : null;
-        }
+        private static JObject Parse(HttpResponseMessage response)
+            => response.IsSuccessStatusCode ? JObject.Parse(response.Content.ReadAsStringAsync().Result) : null;
     }
 }
